@@ -1,0 +1,67 @@
+# ProVela (ex Raffyca / SailingHub) — stato al 14/07/2026
+
+Suite velica modulare, mobile-first, offline-first. Hub + moduli standalone che
+condividono raffyca.css e un layer localStorage. Deploy GitHub Pages, path relativi.
+
+## Moduli (tutti in radice, zero 404, barra fissa ovunque)
+- index.html = Hub (onboarding + menu + vista Tracce/WP legacy dormiente). Mattonella Info.
+- meteo/ = Il Nastro del Vento (PWA, SW namespacato raffyca-meteo).
+- cruscotto/ = strumenti. Registrazione scrive raffyca-rec. % polare calcolata da raffyca-polar (fallback demo).
+- xte/ = XTE upstream (dentro il repo, SW namespacato xte). Non reskinnato (non esiste reskin).
+- performance/ = build React (base ./). Gestisce raffyca-polar (fonte di verità).
+- partenza/ = build React (base ./).
+- routing/raffyca-traversata-map.html = Traversata ricca (polari ORC, maschera Med).
+- impostazioni/ = profilo/tema/settings + caricatore polare CSV.
+- posizione/ = Posizione Live: index.html (broadcaster Upstash) + segui.html (client sola lettura).
+- carta/ = Carta Nautica (OpenSeaMap, WP/tracce, tag, filtri, note, distanza/rilievo, export).
+- info.html = descrizione suite.
+
+## Contratto localStorage
+raffyca-profile {boat,model,zone} · raffyca-waypoints [{id,name,lat,lon,ts,tag?,note?}]
+raffyca-tracks [{id,name,ts,dist,dur,pts,tag?,note?}] · raffyca-active-wp · raffyca-active-track (NEW)
+raffyca-tags {colore:nome} (NEW) · raffyca-settings (merge-safe) · raffyca-theme · raffyca-rec {on,pts,since}
+raffyca-pos {lat,lon} · raffyca-polar {twa,tws,data,meta?} (polare condivisa) · raffyca-live-session
+
+- [FATTO 14/07 Cruscotto] +grandezze AWA/AWS/ETA/TTG/Data-ora/Coordinate/Alba-Tramonto; brg rietichettato Rotta WP; frecce TWA P/S -> Sx/Dx (mure); cifre centrate. Regata: ritardo 2.2s a fine countdown (non taglia la tromba).
+- [FATTO 14/07 Cruscotto] Sbandamento (deviceorientation+smoothing, permesso iOS al primo tocco); Data e ora con data (gg/mm HH:MM); Alba/Tramonto centrati (fit min abbassato). Layout 5: bussola grande NON modificabile (disco 0-360, 2 punte teal=prua/ambra=WP, corpo coperto dal cerchio centrale) + 4 campi; tap sulla bussola cicla NORD su / PRUA su / WP su (COMPASS_MODE persistito).
+## In sospeso (backlog)
+- Cruscotto DA FARE (sessione dedicata): layout a 5 campi (4 piccoli + 1 grande NON modificabile con bussola SVG 0-360 direzione attuale + rotta WP); rotazione bussola (nord su / prua su / rotta-WP su). Chiarire indicatori Stima/Stima K (serve screenshot). Valutare rendering campi testuali (coordinate/data/sole) nel formato numerico.
+- [FATTO 14/07 Batch B] Traversata: (a) slider Efficienza vela 50-100% (deriva la velocita polare, viaggia al worker via STATE.polarEff); (b) export Diario CSV(;) + PDF offline (generatore PDF puro in JS, Courier WinAnsi, salvataggio diretto in Download - niente CDN); (c) intro sfoltita, tolto Nominatim dai crediti (ricerca rimossa).
+- [FATTO 14/07 Batch C] Traversata #5: confermato = frecce mostravano solo l'ora di partenza mentre la rotta usa vento variabile. Aggiunto scrubber 'Ora vento in carta' (frecce a qualsiasi ora) + pallino bianco sulla rotta = dove saresti a quell'ora. Convenzione direzione verificata OK (deg2uv/uv2dir coerenti). >>> Sezione Traversata CHIUSA (A+B+C).
+- [FATTO 14/07 Regata] RICOMPILATA dal sorgente Lovable (race-ready-buddy) con base RELATIVA -> 404 risolto. Ha laylines + sfondo colorato per distanza (zone-far/good/warn/danger). Reintegrati nel build: rf-topbar ProVela, hook __provelaRaceEnd (fine countdown), branding titolo. Redirect Lovable rimosso. Il sorgente NON usa localStorage (Regata autonoma, nessuna chiave da allineare).
+- [FATTO 14/07 Impostazioni] Voce 'Fine countdown regata': Apri Cruscotto (default) / Non fare nulla / Apri URL (+campo). Scrive raceEndAction/raceEndUrl in raffyca-settings (merge-safe).
+- [FATTO 14/07 Regata 404 vero] Causa: BrowserRouter con rotte assolute (/tactical) -> su GitHub Pages sottocartella cadeva su NotFound(404). Fix: HashRouter (rotte #/...), portabile in qualsiasi sottocartella. Bundle nuovo: index-BTGGqSu2.js.
+- [FATTO 14/07 DEPLOY] Ora TUTTI i file vengono 'toccati' (data aggiornata) prima dello zip: risolve date vecchie e GitHub Desktop che non rilevava le modifiche (cache git size+mtime).
+- DA DECIDERE (Regata estetica): il build usa il TEMA del sorgente Lovable (blu scuro + colori-zona), non il reskin LCD esatto della suite (teal #2BD9C4/#060e18). Se vuoi coerenza piena, allineo i token in src/index.css e ricompilo. Verificare anche su cellulare la dimensione box vs sfondo colorato.
+- [FATTO 14/07 estetica] Traversata: overlay SVG spostato nell'overlayPane di Leaflet (coord. layerPoint) -> A/B e barca ORA sopra le isocrone; frecce vento riordinate SOPRA le isocrone e ingrandite; zoom mappa solo con modificatore (Cmd/Ctrl/Alt + scroll) per non zoomare scrollando la pagina (pinch invariato su mobile).
+- [FATTO 14/07] Aggancio zona (prima passata): Carta = inquadratura iniziale per zona (ripiego se GPS assente); Traversata = area di calcolo per zona (Alto Adriatico usa l'area 'adriatico' pre-fatta; altre zone = riquadro on-device centrato sulla zona, A/B auto in mare). Coerente col Meteo.
+- [FATTO 14/07 Batch A] Traversata: (a) riquadri zona LARGHI e SOVRAPPOSTI, costa on-device, Alto Adriatico incluso via ZONE_BOX (Caorle/Venezia/Po, Ravenna, Gargano ora coperti); (b) rimossa ricerca-per-nome (localita+area su misura): resta tocco carta + waypoint di Carta + area A<->B + auto-zona; (c) isocrone piu marcate.
+  TRADE-OFF noto: riquadri piu larghi = griglia vento 11x8 piu grossolana. A/B auto per zona restano indicativi.
+- [FATTO 14/07] Rimosso 'smacc8' dalla pagina di intro (resta tagline 'suite nautica').
+- [FATTO 14/07] Impostazioni: ricerca barca ORC (feedback) + Cruscotto legge raffyca-polar (sottotitolo=nome barca).
+- [FATTO 14/07] Zona onboarding (hub) allineata alla tendina di Impostazioni (stessa lista, niente piu testo libero).
+- [FATTO 14/07] Lista zone canonica = 9 (tolte Mediterraneo occ./or.) allineata su hub + Impostazioni.
+- [FATTO 14/07] Meteo: nomi vento delle zone nuove = rosa dei venti ufficiale (Tramontana/Grecale/Levante/Scirocco/Mezzogiorno/Libeccio/Ponente/Maestrale); Alto Adriatico invariato.
+- [FATTO 14/07] Meteo zone-driven da raffyca-profile.zone: SPOTS_BY_ZONE (Alto Adriatico=8 validati; 8 zone x5 spot GENERICI da verificare). Occhielli agganciati alla zona.
+- Traversata: asciugare testo pagina (TENERE diario verboso), export diario CSV+PDF, font diverso.
+- Impostazioni: formato coordinate (°, °', °'", UTM); sun mode non cablata ai moduli.
+- Meteo: VERIFICARE spot/tarature delle 8 zone non-Adriatiche (coordinate reali, ma ar e p generici); confidenza/nastro (5% ma stretto); intensità raffica; fulmine=CAPE.
+- Regata: azione a fine countdown + voce Impostazioni; laylines; box con sfondo colorato per distanza linea.
+- Performance: riverificare 404; feedback polare ORC trovata.
+- [FATTO 14/07] Rename branding a "ProVela" (titoli, header, topbar, manifest, GPX creator, PWA). NON toccate: chiavi raffyca-*, raffyca.css, filenames raffyca-*.html, funzione collectRaffycaKeys.
+  NOTA: "Raffyca" lasciato di proposito come NOME-BARCA d'esempio/fallback (placeholder onboarding e Impostazioni, default profBoat, header Cruscotto, fallback segui.html). Se Raffyca non e la tua barca, dimmi e lo cambio.
+
+- [FATTO 17/07 Carta Nautica] (1) base carta: default "Nautica (chiara)" = CartoDB Voyager (poche strade, acqua chiara) + seamark OpenSeaMap sopra -> aspetto piu vicino a una carta; selettore basi (Nautica/Minimal/OSM). NB: niente tile ENC vero gratuito senza chiave/S-57, questa e la strada pragmatica. (2) Griglia meridiani/paralleli attivabile, passo FISSO 1° lat+lon, etichette N/S/E/W, ridisegno su moveend, cap a 80° per evitare migliaia di linee. (3) Checkbox "Zone venti" = rettangoli tratteggiati dei quadri d'unione (stessi ZONE_BOX di Traversata, copiati). (4) Doppio-click su nome WP/traccia in lista -> zoom sull'oggetto (WP setView z15, traccia fitBounds). (5) Creazione WP: click singolo NON apre piu il dialog; ora serve Alt-click (desktop) o pressione lunga/tasto destro (touch = contextmenu). (6) Disegno traccia in carta: modo "Traccia" (tocchi = vertici, ↶ annulla punto, Salva chiede nome, calcola dist NM). (7) Misura: modo "Misura" (2 tocchi) -> distanza NM + rotta 000°. Modalita in mutua esclusione, doubleClickZoom disabilitato in draw/misura, griglia/zone in pane sotto i marker (pointer-events none).
+- Memo v2.0 Carta (NON ora): organizzare WP e tracce in gruppi/cartelle attivabili e selezionabili (oltre ai tag colore attuali).
+
+- [FATTO 17/07 Carta fix+AIS] (fix) etichette meridiani non visibili: cadevano sul bordo inferiore della carta (overflow:hidden) -> rialzate dentro l'area (divIcon 70x14, ancora parametrica; paralleli a sx, meridiani centrati e sollevati dal fondo). (fix) box zone venti piu evidente: weight 2.4, opacity .95, tratteggio 9/4, lieve riempimento ambra .05. (NEW) AIS live via AISstream.io: pulsante 📡 AIS, WebSocket wss://stream.aisstream.io/v0/stream, chiave utente in raffyca-ais-key (prompt al primo avvio, pulsante "Chiave" per cambiarla). Sottoscrive il riquadro visibile (pad 0.3), ri-sottoscrive/riconnette su moveend (debounce 800ms), marker freccia verde orientata a COG/TrueHeading, tooltip nome/SOG/COG, pulizia navi ferme da >10 min, spegnimento chiude il socket. NB: nessun tile ENC gratuito; copertura AIS dipende dai ricevitori community.
+- Nuova chiave localStorage: raffyca-ais-key (API key AISstream.io dell'utente, solo locale).
+- [FATTO 18/07 Batimetria+Costa] Traversata: (1) costa GSHHG full-res riportata al 40% (era 8%: isolette a triangolo) -> mediterranean_land_10m.geojson, 2459 isole; maschera Adriatico rigenerata al 40% (193 anelli). (2) INSERITE ISOBATE EMODnet: cartella isobate/ con 9 file per zona (isobate_<slug>.geojson) allineati ai ZONE_BOX; filtrate (rumore di piattaforma via, contorni profondi chiusi e piccoli scartati oltre -100). Toggle 'batimetria' nel blocco toggle; caricatore per-zona (fetch da profilo raffyca-profile.zone); linee colorate per quota; etichette = tocco su isobata (mostra m) + poche permanenti (2 per quota su -10/-50/-100/-500). SW bumped a raffyca-rt-v2 (forza refresh costa; isobate in cache-first on-demand). NB: EMODnet = dato scientifico, non nautico.
+- [FATTO 18/07 Carta+PWA] (1) Isobate anche in Carta Nautica (carta/index.html): pulsante 'Batimetria' in toolbar; carica il file della zona sotto il centro mappa (isoZoneAt sui ZONE_BOX), si aggiorna su moveend; stesse colori/etichette (tocco + poche permanenti); fetch da ../routing/isobate/. (2) PWA sulla HUB: index.html non era installabile (mancavano manifest, service worker, icone). Aggiunti manifest.webmanifest (radice), sw.js (radice, provela-hub-v1: navigazione network-first + shell cache-first), icone pwa-192/512/maskable + apple-touch (riuso da partenza/), e nel head link manifest + theme-color + registrazione SW. I sottomoduli mantengono i loro SW (scope più specifico).
+- [FATTO 18/07 Fix batimetria UI] Carta+Traversata: (1) flicker risolto (isoRefresh non cancella piu' quando il centro esce dalle zone); (2) tocco facilitato: doppio strato geoJSON, uno invisibile spesso 12px per il click + uno sottile colorato non-interattivo; (3) etichette ora includono -20 m; (4) LEGENDA colori-profondita' (div #isoLegend, mostrata col toggle). 
+- [BUG NOTO batimetria dati] Artefatto: contorni profondi falsi (-100/-200) che seguono la costa in acque basse (es. Delta del Po, dove il fondale reale e' 5-28 m). Causa: nel calcolo isobate riempivo i NaN (terra/vuoti) con la MEDIANA del tile prima di smussare; per i tile profondi (Tirreno/Ligure) il cui bordo tocca coste adriatiche, questo iniettava valori profondi sulla terra -> contorni spuri a riva. FIX validato: smussatura NaN-aware (normalized convolution), nessun riempimento -> niente iniezione nei NaN. RICHIEDE riprocessamento dei 7 grid grezzi EMODnet (cancellati per spazio): l'utente li ricarica dal suo Dropbox. Finche' non riprocessati, le isobate profonde vicino costa in Adriatico sono inaffidabili.
+- [FATTO 18/07 Batimetria v2 CORRETTA] Riprocessati tutti e 7 i grid EMODnet con pipeline NaN-aware (smussatura per convoluzione normalizzata, nessun riempimento della terra) -> risolto alla radice l'artefatto dei contorni profondi falsi a riva. Verifica puntuale su tutti i tile: 0-1 artefatti su migliaia di vertici profondi. Filtro piu' severo: aree chiuse piccole rimosse anche a -50/-100 (monti sottomarini = rumore). 9 pacchetti zona rigenerati (drop-in in isobate/). Etichette aumentate: quote [-5,-10,-20,-50,-100,-200,-500], fino a 3 per quota, in Traversata e Carta. Archivio: isobate_ITALIA_v2 (shapefile+geojson+png).
+
+## Deploy
+GitHub Desktop. Contenuto dello zip va alla RADICE del repo (zip "flat"). Path relativi
+= nome repo irrilevante. MAI cancellare la cartella nascosta .git.

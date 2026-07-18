@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Info · ProVela</title>
+<style>
+:root{--bg:#060e18;--panel:#0e2036;--dp:#040c14;--line:#1a3248;--ink:#deedf5;--sub:#5a7a94;
+  --teal:#2BD9C4;--amber:#FFC24B;--mono:ui-monospace,"SF Mono","Roboto Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:100dvh;padding:16px;
+  max-width:620px;margin:0 auto;line-height:1.55;}
+h1{font-size:20px;letter-spacing:.02em;margin-bottom:4px;}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal);margin-bottom:14px;}
+p{color:#c3d4e2;margin-bottom:13px;font-size:14.5px;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px;margin-bottom:12px;}
+.card h3{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);margin-bottom:10px;}
+.mod{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid rgba(26,50,72,.6);font-size:14px;}
+.mod:last-child{border-bottom:0;}
+.mod b{color:var(--ink);min-width:118px;flex:0 0 auto;}
+.mod span{color:var(--sub);}
+.foot{font-family:var(--mono);font-size:11px;color:var(--sub);margin-top:8px;letter-spacing:.03em;}
+</style>
+</head>
+<body>
+<!-- ===== rf-topbar: barra fissa trasversale ProVela (inietta subito dopo <body>) ===== -->
+<style>
+.rf-topbar{position:fixed;top:0;left:0;right:0;height:40px;z-index:9000;display:flex;align-items:center;gap:10px;
+  padding:0 10px;background:linear-gradient(#0c1c2e,#081521);border-bottom:1px solid #1a3248;
+  font-family:ui-monospace,"SF Mono","Roboto Mono",Menlo,Consolas,monospace;color:#5a7a94;font-size:11.5px;
+  letter-spacing:.02em;-webkit-user-select:none;user-select:none;box-shadow:0 2px 10px -6px rgba(0,0,0,.8);}
+.rf-topbar a.rf-home{display:flex;align-items:center;justify-content:center;width:30px;height:30px;flex:none;
+  border-radius:8px;background:rgba(43,217,196,.1);border:1px solid rgba(43,217,196,.35);text-decoration:none;}
+.rf-topbar a.rf-home:active{transform:scale(.92);}
+.rf-topbar .rf-dt{color:#deedf5;white-space:nowrap;}
+.rf-topbar .rf-sun{display:none;}
+.rf-topbar .rf-sun b{color:#FFC24B;font-weight:600;}
+.rf-topbar .rf-pol{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%;color:#5a7a94;}
+.rf-topbar .rf-pol b{color:#2BD9C4;font-weight:600;}
+.rf-topbar .rf-pol .mod{color:#cfe2ee;}
+.rf-topbar .rf-pol .pol{color:#FFC24B;font-weight:600;}
+.rf-topbar .rf-pol .pol.warn{color:#FF6B6B;}
+.rf-topbar .rf-spacer{flex:1;}
+.rf-topbar .rf-status{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:44%;}
+.rf-topbar .rf-status.wp b{color:#2BD9C4;font-weight:600;}
+.rf-topbar .rf-status.rec{color:#FF6B6B;font-weight:600;}
+.rf-topbar .rf-status .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#FF6B6B;
+  margin-right:5px;vertical-align:middle;animation:rfblink 1s steps(2,start) infinite;}
+@keyframes rfblink{50%{opacity:.25}}
+body{padding-top:40px!important;}
+@media (max-width:360px){.rf-topbar .rf-sun{display:none;}}
+@media (max-width:480px){.rf-topbar .rf-pol .mod{display:none;}}
+</style>
+<div class="rf-topbar" role="banner">
+  <a class="rf-home" href="index.html" aria-label="Torna al menu ProVela" title="Menu ProVela">
+    <svg viewBox="0 0 64 64" width="19" height="19" aria-hidden="true"><path d="M32 8 L32 56 L10 56 Z" fill="#2BD9C4" opacity=".95"/><path d="M32 26 L54 56 L32 56 Z" fill="#2BD9C4" opacity=".45"/><line x1="32" y1="6" x2="32" y2="58" stroke="#1a4a42" stroke-width="3"/></svg>
+  </a>
+  <span class="rf-dt" id="rfDt">—</span>
+  <span class="rf-sun" id="rfSun"></span>
+  <span class="rf-pol" id="rfPol" title=""></span>
+  <span class="rf-spacer"></span>
+  <span class="rf-status" id="rfStatus"></span>
+</div>
+<script>
+(function(){
+  var D=["dom","lun","mar","mer","gio","ven","sab"], MO=["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
+  var DEFAULT=[45.65,13.77]; // Golfo di Trieste — default Alto Adriatico
+  function coords(){try{var p=JSON.parse(localStorage.getItem("raffyca-pos")||"null");if(p&&isFinite(p.lat)&&isFinite(p.lon))return[p.lat,p.lon];}catch(e){}return DEFAULT;}
+  // alba/tramonto — equazione del sole (nessuna rete, ~1 min di precisione)
+  function sunTimes(date,lat,lon){
+    var rad=Math.PI/180, deg=180/Math.PI, J2000=2451545;
+    var dayMs=Date.UTC(date.getFullYear(),date.getMonth(),date.getDate());
+    var n=Math.round(dayMs/86400000 - 0.5 + 2440588 - J2000 + 0.0008);
+    var Jstar=n - lon/360;
+    var M=(357.5291 + 0.98560028*Jstar)%360;
+    var C=1.9148*Math.sin(M*rad)+0.02*Math.sin(2*M*rad)+0.0003*Math.sin(3*M*rad);
+    var lam=(M+C+180+102.9372)%360;
+    var Jtr=J2000 + Jstar + 0.0053*Math.sin(M*rad) - 0.0069*Math.sin(2*lam*rad);
+    var dec=Math.asin(Math.sin(lam*rad)*Math.sin(23.44*rad));
+    var co=(Math.sin(-0.833*rad)-Math.sin(lat*rad)*Math.sin(dec))/(Math.cos(lat*rad)*Math.cos(dec));
+    if(co>1)return{rise:null,set:null}; if(co<-1)return{rise:null,set:null};
+    var w=Math.acos(co)*deg;
+    var toDate=function(J){return new Date((J-2440588+0.5)*86400000);};
+    return{rise:toDate(Jtr-w/360),set:toDate(Jtr+w/360)};
+  }
+  function hhmm(d){return d?d.toLocaleTimeString("it",{hour:"2-digit",minute:"2-digit"}):"—";}
+  var elDt=document.getElementById("rfDt"), elSun=document.getElementById("rfSun"), elSt=document.getElementById("rfStatus");
+  var elPol=document.getElementById("rfPol");
+  function esc(x){return String(x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function polarLabel(){
+    var p=null;try{p=JSON.parse(localStorage.getItem("raffyca-polar")||"null");}catch(e){}
+    if(!p||!p.twa||!p.data||!p.twa.length)return{txt:"integrata",cls:"warn"};
+    var m=p.meta||{};
+    if(m.source==="generica"||m.generic)return{txt:(m.boat||"generica"),cls:"warn"};
+    if(m.boat)return{txt:m.boat,cls:""};
+    if(m.source==="csv")return{txt:"CSV",cls:""};
+    return{txt:(m.source||"attiva"),cls:""};
+  }
+  function tickPolar(){
+    if(!elPol)return;
+    var pr=null;try{pr=JSON.parse(localStorage.getItem("raffyca-profile")||"null");}catch(e){}
+    var boat=(pr&&pr.boat)||"",model=(pr&&pr.model)||"";
+    var L=polarLabel();
+    var h="";
+    if(boat)h+='<b>'+esc(boat)+'</b>';
+    if(model)h+=(h?" · ":"")+'<span class="mod">'+esc(model)+'</span>';
+    h+=(h?" · ":"")+'<span class="pol '+L.cls+'">pol '+esc(L.txt)+'</span>';
+    elPol.innerHTML=h;
+    elPol.title=[boat,model,"polare: "+L.txt].filter(Boolean).join(" · ");
+  }
+  var sunDay="";
+  function tickClock(){
+    var now=new Date();
+    elDt.textContent=D[now.getDay()]+" "+now.getDate()+" "+MO[now.getMonth()]+" · "+now.toLocaleTimeString("it",{hour:"2-digit",minute:"2-digit"});
+    var key=now.toDateString();
+    if(key!==sunDay){sunDay=key;var c=coords();var s=sunTimes(now,c[0],c[1]);elSun.innerHTML="&#9728; <b>"+hhmm(s.rise)+"</b> &nbsp;&#9790; <b>"+hhmm(s.set)+"</b>";}
+  }
+  function tickStatus(){
+    var rec=null,id="";
+    try{rec=JSON.parse(localStorage.getItem("raffyca-rec")||"null");}catch(e){}
+    if(rec&&rec.on){elSt.className="rf-status rec";elSt.innerHTML='<span class="dot"></span>REC GPX'+(rec.pts?" · "+rec.pts+" pt":"");return;}
+    try{id=localStorage.getItem("raffyca-active-wp")||"";}catch(e){}
+    if(id){var w=null;try{w=(JSON.parse(localStorage.getItem("raffyca-waypoints")||"[]")).find(function(x){return x.id===id;});}catch(e){}
+      if(w){elSt.className="rf-status wp";elSt.innerHTML="&#9873; WP: <b>"+w.name+"</b>";return;}}
+    elSt.className="rf-status";elSt.textContent="";
+  }
+  tickClock();tickStatus();tickPolar();
+  setInterval(tickClock,20000);
+  setInterval(tickStatus,3000);
+  setInterval(tickPolar,5000);
+  window.addEventListener("storage",tickStatus);window.addEventListener("storage",tickPolar);
+  document.addEventListener("visibilitychange",function(){if(!document.hidden){tickClock();tickStatus();tickPolar();}});
+})();
+</script>
+<!-- ===== /rf-topbar ===== -->
+
+  <div class="eyebrow">◈ La suite</div>
+  <h1>Una cassetta degli attrezzi per navigare a vela</h1>
+  <p>Una suite modulare, pensata per il telefono e usabile anche <b>offline</b>. Riunisce in un unico menu strumenti indipendenti che condividono lo stesso profilo barca, gli stessi waypoint e le stesse tracce. Ogni strumento funziona per conto suo; il menu li tiene insieme.</p>
+  <p>Non è un'app da scaricare da uno store: sono pagine web che il telefono può conservare in memoria e aprire anche senza rete. Puoi aggiungerla alla schermata home e usarla come una normale app. Imposti una volta la barca e la zona di navigazione e ogni strumento parte già configurato — nessun account, nessuna registrazione.</p>
+  <p>È nata per la navigazione da diporto costiera e d'altura breve: privilegia dati chiari e leggibili sotto il sole, con l'incertezza delle previsioni resa esplicita anziché nascosta. Non sostituisce la cartografia ufficiale né gli strumenti di bordo omologati: è un supporto tattico, non uno strumento di sicurezza certificato.</p>
+
+  <div class="card">
+    <h3>Gli strumenti</h3>
+    <div class="mod"><b>Meteo</b><span>previsione tattica multi-modello, con l'incertezza resa visibile</span></div>
+    <div class="mod"><b>Cruscotto</b><span>pannello strumenti configurabile (vento, rotta, velocità, XTE…)</span></div>
+    <div class="mod"><b>Naviga XTE</b><span>navigazione verso un waypoint con scarto di rotta</span></div>
+    <div class="mod"><b>Performance</b><span>velocità reale contro polare della barca</span></div>
+    <div class="mod"><b>Regata</b><span>timer di partenza e tattica sulla linea</span></div>
+    <div class="mod"><b>Traversata</b><span>routing meteo sulla previsione vento</span></div>
+    <div class="mod"><b>Posizione Live</b><span>trasmetti la tua posizione a chi ti segue da terra</span></div>
+    <div class="mod"><b>Carta Nautica</b><span>waypoint e tracce su carta</span></div>
+  </div>
+
+  <div class="card">
+    <h3>Come sono fatti i dati</h3>
+    <p style="margin:0">Profilo, waypoint e tracce vivono sul tuo dispositivo e sono condivisi tra gli strumenti. Niente account, niente server: quello che salvi resta tuo. La Posizione Live è l'unica funzione che, se la attivi tu, trasmette dati all'esterno: chi riceve il link vede solo la tua posizione, in sola lettura, e soltanto finché tieni attiva la trasmissione.</p>
+  </div>
+
+  <div class="foot">Dati meteo: modelli pubblici · Cartografia: OpenStreetMap / OpenSeaMap · Polari: ORC</div>
+  <div class="foot" style="margin-top:14px">Svilup<b>PPA</b>ta da Sergio Moro</div>
+</body>
+</html>

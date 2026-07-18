@@ -1,0 +1,16 @@
+{
+  "name": "ProVela — Regata",
+  "short_name": "ProVela",
+  "description": "Partenza regata: setup linea, countdown GPS con segnali, distanza dalla linea, time-to-burn e lato favorito dal vento.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1c2e",
+  "theme_color": "#0b1c2e",
+  "icons": [
+    { "src": "./pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./pwa-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
