@@ -402,24 +402,24 @@ function sunTimes(date,lat,lon){var rad=Math.PI/180,deg=180/Math.PI,J2000=245154
   if(co>1||co<-1)return{rise:null,set:null};var w=Math.acos(co)*deg,td=function(J){return new Date((J-2440588+0.5)*86400000);};
   return{rise:td(Jtr-w/360),set:td(Jtr+w/360)};}
 const METRICS=[
-  {id:'sog',lbl:'SOG',  sub:'vel. suolo', unit:'kt',color:'teal', fmt:E=>E.sog.toFixed(1)},
-  {id:'cog',lbl:'COG',  sub:'rotta',      unit:'°', color:'',     fmt:E=>pad3(E.cog)},
-  {id:'hdg',lbl:'Prua', sub:'HDG',        unit:'°', color:'',     fmt:E=>pad3(E.hdg)},
-  {id:'stw',lbl:'Vel. barca',sub:'STW',   unit:'kt',color:'',     fmt:E=>E.stw.toFixed(1)},
-  {id:'twa',lbl:'Angolo vento',sub:'TWA', unit:'°', color:'',     fmt:E=>Math.round(Math.abs(E.twa)),
-    tag:E=>E.twa<0?{t:'◄ Sx',c:'p'}:{t:'Dx ►',c:'s'}},
+  {id:'sog',lbl:'SOG',  sub:'vel. suolo', unit:'kt',color:'teal', fmt:E=>E.sog==null?'—':E.sog.toFixed(1)},
+  {id:'cog',lbl:'COG',  sub:'rotta',      unit:'°', color:'',     fmt:E=>E.cog==null?'—':pad3(E.cog)},
+  {id:'hdg',lbl:'Prua', sub:'HDG',        unit:'°', color:'',     fmt:E=>E.hdg==null?'—':pad3(E.hdg)},
+  {id:'stw',lbl:'Vel. barca',sub:'STW',   unit:'kt',color:'',     fmt:E=>E.stw==null?'—':E.stw.toFixed(1)},
+  {id:'twa',lbl:'Angolo vento',sub:'TWA', unit:'°', color:'',     fmt:E=>E.twa==null?'—':Math.round(Math.abs(E.twa)),
+    tag:E=>E.twa==null?null:(E.twa<0?{t:'◄ Sx',c:'p'}:{t:'Dx ►',c:'s'})},
   {id:'tws',lbl:'Vento reale',sub:'TWS',  unit:'kt',color:'amber',fmt:E=>E.tws.toFixed(1)},
   {id:'twd',lbl:'Direz. vento',sub:'TWD', unit:'°', color:'amber',fmt:E=>pad3(E.twd)},
-  {id:'vmg',lbl:'VMG',  sub:'',           unit:'kt',color:'teal', fmt:E=>E.vmg.toFixed(1)},
-  {id:'pol',lbl:'% polare',sub:'',        unit:'%', color:'amber',fmt:E=>Math.round(E.pol)},
+  {id:'vmg',lbl:'VMG',  sub:'',           unit:'kt',color:'teal', fmt:E=>E.vmg==null?'—':E.vmg.toFixed(1)},
+  {id:'pol',lbl:'% polare',sub:'',        unit:'%', color:'amber',fmt:E=>E.pol==null?'—':Math.round(E.pol)},
   {id:'dep',lbl:'Profondità',sub:'',      unit:'m', color:'amber',fmt:E=>E.dep==null?'—':E.dep.toFixed(1)},
   {id:'tmp',lbl:'Temp. acqua',sub:'',     unit:'°C',color:'',     fmt:E=>E.tmp==null?'—':E.tmp.toFixed(1)},
-  {id:'xte',lbl:'XTE',  sub:'scarto rotta',unit:'m',color:'dyn',  fmt:E=>Math.round(E.xte)},
-  {id:'brg',lbl:'Rotta WP',sub:'verso waypoint', unit:'°', color:'', fmt:E=>pad3(E.brg)},
-  {id:'dtw',lbl:'Dist. WP',sub:'',        unit:'NM',color:'amber',fmt:E=>E.dtw.toFixed(2)},
-  {id:'awa',lbl:'Angolo app.',sub:'AWA', unit:'\u00b0', color:'', fmt:E=>Math.round(Math.abs(E.awa)),
-    tag:E=>E.awa<0?{t:'\u25c4 Sx',c:'p'}:{t:'Dx \u25ba',c:'s'}},
-  {id:'aws',lbl:'Vento app.',sub:'AWS',  unit:'kt',color:'amber',fmt:E=>E.aws.toFixed(1)},
+  {id:'xte',lbl:'XTE',  sub:'scarto rotta',unit:'m',color:'dyn',  fmt:E=>E.xte==null?'—':Math.round(E.xte)},
+  {id:'brg',lbl:'Rotta WP',sub:'verso waypoint', unit:'°', color:'', fmt:E=>E.brg==null?'—':pad3(E.brg)},
+  {id:'dtw',lbl:'Dist. WP',sub:'',        unit:'NM',color:'amber',fmt:E=>E.dtw==null?'—':E.dtw.toFixed(2)},
+  {id:'awa',lbl:'Angolo app.',sub:'AWA', unit:'\u00b0', color:'', fmt:E=>E.awa==null?'—':Math.round(Math.abs(E.awa)),
+    tag:E=>E.awa==null?null:(E.awa<0?{t:'\u25c4 Sx',c:'p'}:{t:'Dx \u25ba',c:'s'})},
+  {id:'aws',lbl:'Vento app.',sub:'AWS',  unit:'kt',color:'amber',fmt:E=>E.aws==null?'—':E.aws.toFixed(1)},
   {id:'ttg',lbl:'Tempo a WP',sub:'TTG',  unit:'',  color:'teal', fmt:E=>fmtHM(E.ttg)},
   {id:'eta',lbl:'Arrivo WP',sub:'ETA',   unit:'',  color:'teal', fmt:E=>{var t=E.ttg;if(t==null)return '\u2014';return fmtClk(new Date(Date.now()+t*3600000));}},
   {id:'heel',lbl:'Sbandamento',sub:'',   unit:'\u00b0', color:'', fmt:E=>HEEL.ready?Math.round(Math.abs(HEEL.val)):'\u2014',
@@ -492,29 +492,71 @@ function polarTarget(twa,tws){
   return top+(bot-top)*af;
 }
 
+/* ── GPS reale (posizione, SOG, COG) ── */
+var GPS={lat:null,lon:null,sog:null,cog:null,ts:0,ok:false,_prev:null};
+function bearing(la1,lo1,la2,lo2){var r=Math.PI/180;
+  var y=Math.sin((lo2-lo1)*r)*Math.cos(la2*r);
+  var x=Math.cos(la1*r)*Math.sin(la2*r)-Math.sin(la1*r)*Math.cos(la2*r)*Math.cos((lo2-lo1)*r);
+  return (Math.atan2(y,x)/r+360)%360;}
+function gpsFresh(){return GPS.ok&&GPS.lat!=null&&(Date.now()-GPS.ts)<15000;}
+function gpsStart(){
+  if(!navigator.geolocation)return;
+  navigator.geolocation.watchPosition(function(pp){
+    var c=pp.coords,now=Date.now();
+    GPS.lat=c.latitude;GPS.lon=c.longitude;GPS.ts=now;GPS.ok=true;
+    if(c.speed!=null&&isFinite(c.speed)&&c.speed>=0){GPS.sog=c.speed*1.94384;}
+    else if(GPS._prev){var dt=(now-GPS._prev.ts)/1000;
+      if(dt>0){var dm=hav([GPS._prev.lat,GPS._prev.lon],[c.latitude,c.longitude]);GPS.sog=(dm/dt)*1.94384;}}
+    if(c.heading!=null&&isFinite(c.heading)&&(GPS.sog==null||GPS.sog>0.5)){GPS.cog=c.heading;}
+    else if(GPS._prev){var dd=hav([GPS._prev.lat,GPS._prev.lon],[c.latitude,c.longitude]);
+      if(dd>3)GPS.cog=bearing(GPS._prev.lat,GPS._prev.lon,c.latitude,c.longitude);}
+    GPS._prev={lat:c.latitude,lon:c.longitude,ts:now};
+    try{localStorage.setItem('raffyca-pos',JSON.stringify({lat:c.latitude,lon:c.longitude}));}catch(e){}
+    paint();
+  },function(){GPS.ok=false;paint();},{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+}
+function wpTarget(){try{var id=localStorage.getItem('raffyca-active-wp')||'';if(!id)return null;
+  var w=(JSON.parse(localStorage.getItem('raffyca-waypoints')||'[]')).find(function(x){return x.id===id;});
+  if(!w||!isFinite(w.lat)||!isFinite(w.lon))return null;return w;}catch(e){return null;}}
+
 /* ── stato effettivo secondo sorgenti ── */
 function eff(){
-  const E={sog:S.sog,cog:S.cog,brg:S.brg,dtw:S.dtw,xte:S.xte};
-  E.hdg = SRC==='estimate'? S.cog : S.hdg;
-  E.stw = SRC==='estimate'? S.sog : S.stw;
-  E.dep = SRC==='estimate'? null  : S.dep;
-  E.tmp = SRC==='estimate'? null  : S.tmp;
+  const fresh=gpsFresh();
+  const E={};
+  E.sog = fresh? GPS.sog : null;
+  E.cog = (fresh&&GPS.cog!=null)? GPS.cog : null;
+  E.hdg = E.cog;                          /* telefono: prua ≈ COG */
+  E.stw = SRC==='signalk'? S.stw : null;  /* STW solo da strumenti di bordo */
+  E.dep = SRC==='signalk'? S.dep : null;
+  E.tmp = SRC==='signalk'? S.tmp : null;
   if(WIND==='manual'){E.tws=MW.tws;E.twd=MW.twd;}
   else {E.tws=S.tws;E.twd=S.twd;}
-  let d=((E.twd-E.cog+540)%360)-180;   // -180..180, >0 = dritta (S), <0 = sinistra (P)
-  E.twa=d;
-  E.vmg=Math.abs(E.stw*Math.cos(d*Math.PI/180));
-  const tgt=polarTarget(E.twa,E.tws);
-  E.pol = tgt>0.3 ? Math.max(0,Math.min(120, 100*E.stw/tgt)) : 0;
-  var twaR=E.twa*Math.PI/180;
-  E.aws=Math.sqrt(E.tws*E.tws+E.stw*E.stw+2*E.tws*E.stw*Math.cos(twaR));
-  E.awa=(E.aws>0.05)?Math.atan2(E.tws*Math.sin(twaR),E.tws*Math.cos(twaR)+E.stw)*180/Math.PI:0;
-  E.ttg=(E.sog>0.2&&E.dtw!=null&&isFinite(E.dtw))?E.dtw/E.sog:null;
+  var spd=(E.stw!=null)?E.stw:E.sog;      /* velocità per VMG/AWA: STW se c'è, altrimenti SOG */
+  if(E.cog!=null){
+    let d=((E.twd-E.cog+540)%360)-180;    // -180..180, >0 = dritta (S), <0 = sinistra (P)
+    E.twa=d;
+    E.vmg=(spd!=null)?Math.abs(spd*Math.cos(d*Math.PI/180)):null;
+    var twaR=d*Math.PI/180;
+    if(spd!=null){
+      E.aws=Math.sqrt(E.tws*E.tws+spd*spd+2*E.tws*spd*Math.cos(twaR));
+      E.awa=(E.aws>0.05)?Math.atan2(E.tws*Math.sin(twaR),E.tws*Math.cos(twaR)+spd)*180/Math.PI:0;
+    } else {E.aws=null;E.awa=null;}
+  } else {E.twa=null;E.vmg=null;E.aws=null;E.awa=null;}
+  var polSpd=(E.stw!=null)?E.stw:E.sog;
+  if(E.twa!=null&&polSpd!=null){const tgt=polarTarget(E.twa,E.tws);
+    E.pol=tgt>0.3?Math.max(0,Math.min(120,100*polSpd/tgt)):0;}
+  else E.pol=null;
+  var pos=fresh?[GPS.lat,GPS.lon]:null, wp=wpTarget();
+  if(pos&&wp){E.brg=bearing(pos[0],pos[1],wp.lat,wp.lon);
+    E.dtw=hav(pos,[wp.lat,wp.lon])/1852;
+    E.ttg=(E.sog!=null&&E.sog>0.2)?E.dtw/E.sog:null;}
+  else {E.brg=null;E.dtw=null;E.ttg=null;}
+  E.xte=null;                             /* XTE richiede una tratta origine→WP: non disponibile */
   return E;
 }
 function chip(id){
-  if(id==='dep'||id==='tmp') return SRC==='estimate'?{t:'n/d',c:'na'}:null;
-  if(id==='hdg'||id==='stw') return SRC==='estimate'?{t:'stima',c:''}:null;
+  if(id==='dep'||id==='tmp'||id==='stw') return SRC==='estimate'?{t:'n/d',c:'na'}:null;
+  if(id==='hdg') return {t:'≈COG',c:''};
   if(['tws','twd','twa','vmg','pol'].includes(id))
     return WIND==='estimate'?{t:'stima',c:''}:WIND==='manual'?{t:'man',c:'man'}:null;
   return null;
@@ -524,7 +566,7 @@ function chip(id){
 function cpol(cx,cy,r,deg){var t=deg*Math.PI/180;return [cx+r*Math.sin(t), cy-r*Math.cos(t)];}
 function compassSVG(hdg,brg,mode){
   var cx=100,cy=100;
-  hdg=((hdg%360)+360)%360;
+  var noHdg=(hdg==null||!isFinite(hdg)); hdg=noHdg?0:((hdg%360)+360)%360;
   var hasWP=(brg!=null&&isFinite(brg)); if(hasWP)brg=((brg%360)+360)%360;
   var rot = mode==='heading'? -hdg : (mode==='wp'? -(hasWP?brg:hdg) : 0);
   var s='';
@@ -537,10 +579,10 @@ function compassSVG(hdg,brg,mode){
   function arrow(deg,color,op){var ap=cpol(cx,cy,90,deg);var t=deg*Math.PI/180,w=8;
     var b1=[cx+w*Math.cos(t),cy+w*Math.sin(t)],b2=[cx-w*Math.cos(t),cy-w*Math.sin(t)];
     return '<polygon points="'+ap[0].toFixed(1)+','+ap[1].toFixed(1)+' '+b1[0].toFixed(1)+','+b1[1].toFixed(1)+' '+b2[0].toFixed(1)+','+b2[1].toFixed(1)+'" fill="'+color+'" opacity="'+op+'"/>';}
-  s+=arrow(hdg+rot,'#2BD9C4',0.9);
+  s+=arrow(hdg+rot,'#2BD9C4',noHdg?0.25:0.9);
   if(hasWP)s+=arrow(brg+rot,'#FFC24B',0.8);
   s+='<circle cx="100" cy="100" r="46" fill="#08131f"/><circle cx="100" cy="100" r="46" fill="none" stroke="#1a3550" stroke-width="1"/>';
-  s+='<text x="100" y="95" text-anchor="middle" font-size="27" font-weight="700" fill="#cfe3f2" font-family="ui-monospace,monospace" letter-spacing="-1">'+pad3(Math.round(hdg))+'</text>';
+  s+='<text x="100" y="95" text-anchor="middle" font-size="27" font-weight="700" fill="#cfe3f2" font-family="ui-monospace,monospace" letter-spacing="-1">'+(noHdg?'———':pad3(Math.round(hdg)))+'</text>';
   s+='<text x="100" y="110" text-anchor="middle" font-size="8.5" fill="#6f93b2" font-family="ui-monospace,monospace" letter-spacing="1.5">PRUA</text>';
   if(hasWP)s+='<text x="100" y="127" text-anchor="middle" font-size="10.5" font-weight="700" fill="#FFC24B" font-family="ui-monospace,monospace">WP '+pad3(Math.round(brg))+'\u00b0</text>';
   var ml=mode==='heading'?'PRUA su':mode==='wp'?'WP su':'NORD su';
@@ -717,10 +759,11 @@ function refreshActiveWp(){
 
 /* segna waypoint alla posizione corrente */
 $('btnWpt').addEventListener('click',()=>{
+  if(!gpsFresh()){toast('GPS non disponibile: waypoint non salvato');return;}
   const def='WP '+new Date().toLocaleTimeString('it',{hour:'2-digit',minute:'2-digit'});
   const name=prompt('Nome waypoint:',def); if(!name)return;
   const w=lsGet('raffyca-waypoints');
-  w.push({id:'w'+Date.now(),name:name.trim(),lat:S.lat,lon:S.lon,ts:Date.now()});
+  w.push({id:'w'+Date.now(),name:name.trim(),lat:GPS.lat,lon:GPS.lon,ts:Date.now()});
   lsSet('raffyca-waypoints',w);
   if(navigator.vibrate)navigator.vibrate(15);
   toast('Waypoint \u201C'+name.trim()+'\u201D salvato');
@@ -728,7 +771,7 @@ $('btnWpt').addEventListener('click',()=>{
 
 /* registra traccia GPX (campionamento da Impostazioni) */
 let recOn=false,recPts=[],recTimer=null,recTick=null,recStart=0;
-function sample(){recPts.push([S.lat,S.lon,Date.now()]);try{localStorage.setItem("raffyca-rec",JSON.stringify({on:true,pts:recPts.length,since:recStart}));}catch(e){}updateTrkBtn();}
+function sample(){if(!gpsFresh())return;recPts.push([GPS.lat,GPS.lon,Date.now()]);try{localStorage.setItem("raffyca-rec",JSON.stringify({on:true,pts:recPts.length,since:recStart}));}catch(e){}updateTrkBtn();}
 function updateTrkBtn(){if(!recOn)return;
   const el=Math.round((Date.now()-recStart)/1000);
   $('trkTx').textContent='Stop '+Math.floor(el/60)+':'+String(el%60).padStart(2,'0')+' · '+recPts.length;}
@@ -760,25 +803,23 @@ window.addEventListener('storage',e=>{if(e.key==='raffyca-polar'){loadPolar();pa
 /* ── simulatore ── */
 function drift(){
   const n=(x,d,lo,hi)=>Math.max(lo,Math.min(hi,x+(Math.random()-.5)*d));
+  /* solo grandezze SENZA sorgente dal telefono: vento stima + strumenti di bordo (placeholder Signal K) */
   S.tws=n(S.tws,.7,5,27); S.twd=(S.twd+(Math.random()-.5)*6+360)%360;
-  S.sog=n(S.sog,.2,3,8.5); S.stw=S.sog+n(0,.3,-.4,.4);
-  S.cog=n(S.cog,3,30,270); S.hdg=S.cog+n(0,.3,-6,6);
-  S.dep=n(S.dep,1,5,40); S.tmp=n(S.tmp,.08,14,19);
-  S.xte=n(S.xte,10,0,80); if(Math.random()<.1)S.xside*=-1;
-  S.brg=n(S.brg,4,80,110); S.dtw=n(S.dtw,.04,.05,1.2);
-  S.lat+=(Math.random()-.5)*0.0004; S.lon+=(Math.random()-.5)*0.0006;
+  S.stw=n(S.stw,.3,3,9); S.dep=n(S.dep,1,5,40); S.tmp=n(S.tmp,.08,14,19);
   paint();
 }
 
 /* ── avvio ── */
 load();
 loadPolar();
+gpsStart();
 $('segLayout').querySelectorAll('button').forEach(x=>x.classList.toggle('on',+x.dataset.n===N));
 $('windSrc').dataset.w=WIND; $('windTx').textContent=WLBL[WIND];
 build();
 refreshActiveWp();
 setTimeout(()=>toast('Tieni premuto un campo per cambiare grandezza'),700);
 if(!reduce)setInterval(drift,1200);
+setInterval(paint,1000);
 </script>
 </body>
 </html>
