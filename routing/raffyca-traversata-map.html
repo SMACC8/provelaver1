@@ -299,6 +299,7 @@ body{padding-top:40px!important;}
       <button data-ab="B">Arrivo B</button>
     </div>
     <select id="wpPick" title="Imposta A/B da un waypoint salvato" style="font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line,#1a3248);background:#0b1a2c;color:#deedf5"><option value="">— A/B da waypoint —</option></select>
+    <button class="go" id="abMoveBtn" title="Attiva lo spostamento di A e B: quando è attivo puoi trascinare i pin o toccare la carta. Evita spostamenti accidentali su touch.">✥ Muovi A/B</button>
     <button class="go" id="resetBtn" title="Riporta A e B ai punti di esempio">↺ Reset</button>
     <button class="go" id="fitBtn" title="Crea un'area di mare che racchiude A e B (es. Trieste↔Venezia)">⤢ Area su A↔B</button>
     <button class="go" id="recalcBtn" title="Ricalcola la rotta">↻ Aggiorna</button>
@@ -309,6 +310,10 @@ body{padding-top:40px!important;}
     <div id="map"></div>
     <svg id="rfOverlay" xmlns="http://www.w3.org/2000/svg"></svg>
     <div class="busy" id="busy" hidden><span id="busyTx">⏳ Preparo la costa (una volta sola)…</span></div>
+    <div id="isoLegend" style="display:none;position:absolute;left:8px;bottom:8px;z-index:650;pointer-events:none;background:rgba(6,14,24,.85);border:1px solid #1a3248;border-radius:8px;padding:6px 9px;font:600 10px ui-monospace,monospace;color:#cfe">
+      <div style="opacity:.65;margin-bottom:3px;letter-spacing:.5px">BATIMETRIA (m)</div>
+      <span style="color:#8fe3ff">━</span>5 <span style="color:#2BD9C4">━</span>10 <span style="color:#46d68a">━</span>20 <span style="color:#FFC24B">━</span>50 <span style="color:#FF6B6B">━</span>100 <span style="color:#c792ea">━</span>200 <span style="color:#f78fb3">━</span>500 <span style="color:#9aa7ff">━</span>1000
+    </div>
   </div>
   <div class="hint" style="margin:6px 28px 0">Zoom mappa: tieni premuto ⌘/Ctrl (o Alt) e scorri. Su telefono: pizzica.</div>
 
@@ -553,7 +558,11 @@ function route(){
         if(TPEN&&!motored&&p._side!==0&&sideC!==p._side)adv=Math.max(v*dt*0.2,adv-v*TPEN);
         var np=moveTo(p,h,adv);if(np.lat>A.latN||np.lat<A.latS||np.lon<A.lonW||np.lon>A.lonE)continue;if(hitsLand(p,np))continue;
         if(MAXW<1e9&&windAt(np.lat,np.lon,dep+p.t+dt).tws>MAXW)continue;
-        if(STATE.coastBuf>0){var dn=coastDist(np.lat,np.lon);if(dn<STATE.coastBuf&&dn<=coastDist(p.lat,p.lon))continue;}
+        if(STATE.coastBuf>0){var dn=coastDist(np.lat,np.lon);
+          if(dn<STATE.coastBuf&&dn<=coastDist(p.lat,p.lon)){
+            var CORR=Math.max(STATE.coastBuf,0.8);          // corridoio di partenza/arrivo: A e B possono stare sottocosta
+            if(dist(np,Sp)>CORR&&dist(np,Gp)>CORR)continue;
+          }}
         cand.push({lat:np.lat,lon:np.lon,prev:p,motor:motored,t:p.t+dt,_side:motored?p._side:sideC});}}
     if(!cand.length)break;
     var buckets={};for(var c=0;c<cand.length;c++){var q=cand[c],br=bearing(start,q),sec=Math.round(br/360*SECT),r=dist(start,q);if(!buckets[sec]||r>buckets[sec]._r){q._r=r;buckets[sec]=q;}}
@@ -642,7 +651,7 @@ function rfWorkerSource(){
     'layers:R.layers.map(function(L){return L.map(function(n){return{lat:n.lat,lon:n.lon};});}),'+
     'diag:R.diag,maneuvers:R.maneuvers,summary:R.summary};}';
   var onmsg='onmessage=function(e){var d=e.data;FIELD=d.field;STATE=d.state;AREAS={};AREAS[d.area]=d.areaObj;MED_MASKS={};MED_MASKS[d.area]=d.mask;'+
-    'var R=route();diagnose(R);var c=cleanResult(R);c.seq=d.seq;postMessage(c);};';
+    'var R=route();diagnose(R);var c=cleanResult(R);c.seq=d.seq;c.area=d.area;postMessage(c);};';
   return consts+'\n'+fns.map(function(f){return f.toString();}).join('\n')+'\n'+clean+'\n'+onmsg;
 }
 function initWorker(){if(typeof Worker==='undefined'||typeof Blob==='undefined'||typeof URL==='undefined'||!URL.createObjectURL)return;
@@ -654,13 +663,14 @@ function initWorker(){if(typeof Worker==='undefined'||typeof Blob==='undefined'|
 function rebuildWorker(){if(RF_WORKER){try{RF_WORKER.terminate();}catch(e){}}RF_WORKER=null;rfBusy=false;rfPending=false;if(typeof initWorker==='function')initWorker();}
 function jobParams(){if(STATE.coastBuf>0)coastDistField(MED_MASKS[FIELD.area]);return {seq:++rfReqs,area:FIELD.area,areaObj:AREAS[FIELD.area],field:FIELD,mask:MED_MASKS[FIELD.area],
   state:{dep:STATE.dep,motorOn:STATE.motorOn,mot:STATE.mot,maxWind:STATE.maxWind,coastBuf:STATE.coastBuf,tackPen:STATE.tackPen,polarEff:STATE.polarEff,A:{lat:STATE.A.lat,lon:STATE.A.lon},B:{lat:STATE.B.lat,lon:STATE.B.lon}}};}
-function routeSync(){R_CACHE=route();diagnose(R_CACHE);refreshAfterRoute();}
+function routeSync(){R_CACHE=route();R_CACHE.area=FIELD.area;diagnose(R_CACHE);refreshAfterRoute();}
 function windClock(idx){var t=(FIELD.times&&FIELD.times[clamp(Math.round(idx),0,(FIELD.times.length||1)-1)])||'';return t.slice(11)||('+'+Math.round(idx)+'h');}
 function syncWindView(){var sl=document.getElementById('windHour');if(!sl)return;var maxI=Math.max(1,(FIELD.slices.length||15)-1);sl.max=maxI;
   if(WIND_VIEW==null){sl.value=clamp(Math.round(STATE.dep),0,maxI);}
   var l=document.getElementById('windHourLbl');if(l)l.textContent=windClock(WIND_VIEW==null?STATE.dep:WIND_VIEW);}
 function refreshAfterRoute(){if(typeof updateReadout==='function')updateReadout();if(typeof syncWindView==='function')syncWindView();if(typeof redraw==='function')redraw();}
 function computeRoute(){
+  if(typeof saveUI==='function')saveUI();
   if(STATE.coastBuf>0&&typeof coastDistField==='function')coastDistField(MED_MASKS[FIELD.area]);
   if(!RF_WORKER){routeSync();return;}
   if(rfBusy){rfPending=true;return;}              // durante drag/slider: tieni solo l'ultimo
@@ -668,6 +678,9 @@ function computeRoute(){
 var WIND_VIEW=null; // ora vento mostrata in carta (null = ora di partenza)
 function buildOverlay(P){
   if(!R_CACHE)computeRoute();var R=R_CACHE,A=AREAS[FIELD.area],dep=STATE.dep,s='';
+  // vero solo se la rotta in cache è dell'area attuale: evita che isocrone/rotta della zona
+  // precedente restino disegnate nella breve finestra prima che il worker restituisca la nuova.
+  var routeOK=!!(R&&R.path&&R.layers&&(!R.area||R.area===FIELD.area));
   var defs='<defs>'+
     '<marker id="wha" markerWidth="7" markerHeight="7" refX="5.8" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 z" fill="#2BD9C4"/></marker>'+
     '<marker id="whb" markerWidth="7" markerHeight="7" refX="5.8" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 z" fill="#7BD88A"/></marker>'+
@@ -678,9 +691,14 @@ function buildOverlay(P){
   if((!tc||tc.checked)&&COAST_SEGS.length){var cs='';for(var ci=0;ci<COAST_SEGS.length;ci+=4){var c1=P(COAST_SEGS[ci],COAST_SEGS[ci+1]),c2=P(COAST_SEGS[ci+2],COAST_SEGS[ci+3]);
     cs+='M'+c1.x.toFixed(1)+' '+c1.y.toFixed(1)+'L'+c2.x.toFixed(1)+' '+c2.y.toFixed(1);}
     s+='<path d="'+cs+'" fill="none" stroke="#52718f" stroke-opacity="0.55" stroke-width="1"/>';}
-  // isochrones
-  if(document.getElementById('tIso').checked){for(var li=0;li<R.layers.length;li++){
-    var Lr=R.layers[li].slice();if(Lr.length<3)continue;
+  // isochrones — una ogni ~N passi (i passi hanno durata uniforme => spaziatura ~oraria):
+  // niente ammassi vicino ad A/B o costa, e non dipende da campi (.t) assenti nel risultato del worker.
+  if(routeOK&&document.getElementById('tIso').checked){
+    var Ntot=R.layers.length,kStep=Math.max(1,Math.round(Ntot/10));
+    for(var li=0;li<Ntot;li++){
+    if(((li+1)%kStep!==0)&&li!==Ntot-1)continue;   // salta i passi intermedi e le prime isocrone minuscole attorno ad A
+    var Lr0=R.layers[li];if(!Lr0||Lr0.length<3)continue;
+    var Lr=Lr0.slice();
     for(var n0=0;n0<Lr.length;n0++){Lr[n0]._b=bearing(R.start,Lr[n0]);Lr[n0]._r=dist(R.start,Lr[n0]);}
     Lr.sort(function(a,b){return a._b-b._b;});
     var maxr=0;for(var n1=0;n1<Lr.length;n1++)if(Lr[n1]._r>maxr)maxr=Lr[n1]._r;
@@ -696,11 +714,11 @@ function buildOverlay(P){
       var w=uv2dir(sl.u[j][i],sl.v[j][i]),pt=P(lat,lon),ar=(w.twd+180)*Math.PI/180,L=clamp(6+w.tws*0.6,8,16),dx=Math.sin(ar)*L,dy=-Math.cos(ar)*L;
       var col=speedColor(w.tws),mk=w.tws<7?'wha':w.tws<13?'whb':w.tws<18?'whc':'whd';
       s+='<line x1="'+(pt.x-dx).toFixed(1)+'" y1="'+(pt.y-dy).toFixed(1)+'" x2="'+(pt.x+dx).toFixed(1)+'" y2="'+(pt.y+dy).toFixed(1)+'" stroke="'+col+'" stroke-opacity="0.98" stroke-width="2.2" marker-end="url(#'+mk+')"/>';}}
-  // direct line
-  var pa=P(R.start.lat,R.start.lon),pb=P(R.goal.lat,R.goal.lon);
+  // direct line — sempre da A/B correnti (STATE), così è coerente anche mentre la rotta si ricalcola
+  var pa=P(STATE.A.lat,STATE.A.lon),pb=P(STATE.B.lat,STATE.B.lon);
   s+='<line x1="'+pa.x.toFixed(1)+'" y1="'+pa.y.toFixed(1)+'" x2="'+pb.x.toFixed(1)+'" y2="'+pb.y.toFixed(1)+'" stroke="#cfe0f0" stroke-opacity="0.5" stroke-width="1.2" stroke-dasharray="2 5"/>';
   // route
-  var Pth=R.path;for(var k=1;k<Pth.length;k++){var u1=P(Pth[k-1].lat,Pth[k-1].lon),u2=P(Pth[k].lat,Pth[k].lon);
+  var Pth=routeOK?R.path:[];for(var k=1;k<Pth.length;k++){var u1=P(Pth[k-1].lat,Pth[k-1].lon),u2=P(Pth[k].lat,Pth[k].lon);
     s+='<line x1="'+u1.x.toFixed(1)+'" y1="'+u1.y.toFixed(1)+'" x2="'+u2.x.toFixed(1)+'" y2="'+u2.y.toFixed(1)+'" stroke="'+(Pth[k].motor?'#FFC24B':'#2BD9C4')+'" stroke-width="3.4" '+(Pth[k].motor?'stroke-dasharray="6 4"':'')+' stroke-linecap="round" stroke-opacity="0.95"/>';}
   // posizione lungo la rotta all'ora del vento mostrato
   var _e=_wv-dep;
@@ -708,7 +726,7 @@ function buildOverlay(P){
     var _mp=P(_bk.lat,_bk.lon);
     s+='<circle cx="'+_mp.x.toFixed(1)+'" cy="'+_mp.y.toFixed(1)+'" r="6" fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.95"/><circle cx="'+_mp.x.toFixed(1)+'" cy="'+_mp.y.toFixed(1)+'" r="2.4" fill="#ffffff"/>';}
   // segni di manovra (virata = rombo azzurro, strambata = rombo ambra)
-  if(R.maneuvers){for(var mi=0;mi<R.maneuvers.length;mi++){var mn=R.maneuvers[mi],mp=P(mn.lat,mn.lon),col=(mn.type==='vir'?'#9fd8ff':'#FFC24B');
+  if(routeOK&&R.maneuvers){for(var mi=0;mi<R.maneuvers.length;mi++){var mn=R.maneuvers[mi],mp=P(mn.lat,mn.lon),col=(mn.type==='vir'?'#9fd8ff':'#FFC24B');
     s+='<rect x="'+(mp.x-4).toFixed(1)+'" y="'+(mp.y-4).toFixed(1)+'" width="8" height="8" fill="'+col+'" stroke="#07121F" stroke-width="1.5" transform="rotate(45 '+mp.x.toFixed(1)+' '+mp.y.toFixed(1)+')"/>';}}
   return defs+s;
 }
@@ -717,6 +735,9 @@ function updateReadout(){var R=R_CACHE||route(),A=AREAS[FIELD.area],P=R.path;
   var pctMot=P.length>1?Math.round(motL/(P.length-1)*100):0,hh=Math.floor(R.eta),mm=Math.round((R.eta-hh)*60),wA=windAt(R.start.lat,R.start.lon,STATE.dep);
   var t=FIELD.times[Math.round(STATE.dep)]||'';
   var warn='';if(isLand(R.start.lat,R.start.lon))warn=' <span style="color:var(--coral)">[A a terra — spostala in mare]</span>';else if(isLand(R.goal.lat,R.goal.lon))warn=' <span style="color:var(--coral)">[B a terra — spostalo in mare]</span>';
+  if(STATE.coastBuf>0&&typeof coastDist==='function'){var _dA=coastDist(R.start.lat,R.start.lon),_dB=coastDist(R.goal.lat,R.goal.lon);
+    if(!R.finished)warn+=' <span style="color:var(--coral)">— con “Lontano dalla costa” la rotta non chiude: riduci il buffer o allontana A/B dalla riva</span>';
+    else if(_dB<STATE.coastBuf||_dA<STATE.coastBuf)warn+=' <span style="color:var(--amber)">— '+((_dB<STATE.coastBuf)?'B':'A')+' è entro il buffer: avvicinamento forzato</span>';}
   var capTxt=(STATE.maxWind&&STATE.maxWind>0)?' · <b style="color:#9fd8ff">evita &gt;'+STATE.maxWind+' kt</b>':'';
   capTxt+=(STATE.coastBuf&&STATE.coastBuf>0)?' · <b style="color:#7BD88A">costa &ge;'+STATE.coastBuf+' NM</b>':'';
   var pctStr=R.finished?(', +'+Math.round((sailed/Math.max(1,straight)-1)*100)+'%'):'';
@@ -880,7 +901,7 @@ function exportDiarioPDF(){var R=R_CACHE;if(!R||!R.diag||!R.diag.length){toast('
   if(c)c.addEventListener('click',exportDiarioCSV);if(p)p.addEventListener('click',exportDiarioPDF);})();
 
 // ---------- Leaflet wiring ----------
-var map=null,baseLayer=null,seaLayer=null,markA=null,markB=null,activeAB='A',_toastT=null;
+var map=null,baseLayer=null,seaLayer=null,markA=null,markB=null,activeAB='A',_toastT=null,AB_MOVE=false;
 function toast(msg){var el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(_toastT);_toastT=setTimeout(function(){el.classList.remove('show');},2600);}
 function redraw(){if(!map)return;var svg=document.getElementById('rfOverlay'),op=map.getPanes().overlayPane;
   if(svg.parentNode!==op){op.appendChild(svg);svg.style.position='absolute';}
@@ -892,10 +913,19 @@ function redraw(){if(!map)return;var svg=document.getElementById('rfOverlay'),op
 function fitArea(area){var A=AREAS[area];map.fitBounds([[A.latS,A.lonW],[A.latN,A.lonE]]);}
 function abIcon(letter,color){return L.divIcon({className:'ab-pin',html:'<div class="abdot" style="background:'+color+'">'+letter+'</div>',iconSize:[26,26],iconAnchor:[13,13]});}
 function placeMarkers(){if(!map)return;
-  if(!markA){markA=L.marker([STATE.A.lat,STATE.A.lon],{draggable:true,keyboard:false,icon:abIcon('A','#2BD9C4')}).addTo(map);
+  if(!markA){markA=L.marker([STATE.A.lat,STATE.A.lon],{draggable:AB_MOVE,keyboard:false,icon:abIcon('A','#2BD9C4')}).addTo(map);
     markA.on('dragend',function(){var ll=markA.getLatLng();setAB('A',ll.lat,ll.lng);});}else markA.setLatLng([STATE.A.lat,STATE.A.lon]);
-  if(!markB){markB=L.marker([STATE.B.lat,STATE.B.lon],{draggable:true,keyboard:false,icon:abIcon('B','#FF6B6B')}).addTo(map);
-    markB.on('dragend',function(){var ll=markB.getLatLng();setAB('B',ll.lat,ll.lng);});}else markB.setLatLng([STATE.B.lat,STATE.B.lon]);}
+  if(!markB){markB=L.marker([STATE.B.lat,STATE.B.lon],{draggable:AB_MOVE,keyboard:false,icon:abIcon('B','#FF6B6B')}).addTo(map);
+    markB.on('dragend',function(){var ll=markB.getLatLng();setAB('B',ll.lat,ll.lng);});}else markB.setLatLng([STATE.B.lat,STATE.B.lon]);
+  applyAbMove();}
+/* Muovi A/B: quando OFF, i pin non si trascinano e il tocco sulla carta non sposta A/B (evita spostamenti accidentali su touch). */
+function applyAbMove(){
+  [markA,markB].forEach(function(m){if(m&&m.dragging){if(AB_MOVE)m.dragging.enable();else m.dragging.disable();}});
+  var b=document.getElementById('abMoveBtn');
+  if(b){b.style.background=AB_MOVE?'var(--teal)':'';b.style.color=AB_MOVE?'#062018':'';b.style.borderColor=AB_MOVE?'var(--teal)':'';}
+  var mp=document.getElementById('map');if(mp)mp.style.cursor=AB_MOVE?'crosshair':'';}
+function toggleAbMove(){AB_MOVE=!AB_MOVE;applyAbMove();
+  toast(AB_MOVE?'Muovi A/B ATTIVO — trascina i pin o tocca la carta':'Muovi A/B disattivato — pin bloccati');}
 function setAB(which,lat,lon){var c=clampToArea(FIELD.area,lat,lon);STATE[which]={lat:c.lat,lon:c.lon};
   if(which==='A'&&markA)markA.setLatLng([c.lat,c.lon]);if(which==='B'&&markB)markB.setLatLng([c.lat,c.lon]);
   computeRoute();
@@ -938,6 +968,7 @@ function initZoneArea(){
   var b=document.getElementById("customAreaBtn"); if(b){b.style.display="";b.textContent="⚓ "+z;}
   document.querySelectorAll(".bar button[data-area]").forEach(function(x){x.classList.toggle("on",x===b);});
   loadArea("custom"); if(map)map.panTo([(box.latN+box.latS)/2,(box.lonW+box.lonE)/2]);
+  if(typeof applySavedAB==='function')applySavedAB();
 }
 function loadCoast(){if(COAST)return;
   var ab=document.getElementById('areaBtn');
@@ -1047,7 +1078,7 @@ function initMap(){if(typeof L==='undefined'){return;}
   var LocateCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){var b=L.DomUtil.create('a','leaflet-bar');b.href='#';b.title='La mia posizione';b.innerHTML='◎';b.style.cssText='width:30px;height:30px;line-height:30px;text-align:center;font-size:17px;background:#0e2036;color:#2BD9C4;text-decoration:none';L.DomEvent.on(b,'click',function(e){L.DomEvent.stop(e);if(!navigator.geolocation){toast('GPS non disponibile');return;}navigator.geolocation.getCurrentPosition(function(pp){map.setView([pp.coords.latitude,pp.coords.longitude],11);toast('La tua posizione');},function(){toast('Posizione non disponibile');},{enableHighAccuracy:true,timeout:15000});});return b;}});map.addControl(new LocateCtl());
   namesLayer=buildNames();namesLayer.addTo(map);
   map.on('move zoom viewreset zoomend moveend resize',redraw);
-  map.on('click',function(e){setAB(activeAB,e.latlng.lat,e.latlng.lng);});
+  map.on('click',function(e){if(!AB_MOVE){toast('Tocca “Muovi A/B” per spostare i punti');return;}setAB(activeAB,e.latlng.lat,e.latlng.lng);});
   fitArea(FIELD.area);placeMarkers();redraw();}
 
 function setPill(){var p=document.getElementById('pill');if(FIELD.source==='live'){p.className='pill live';p.textContent='dati live · '+MODELN;}else{p.className='pill demo';p.textContent='campo sintetico';}}
@@ -1058,6 +1089,7 @@ function loadReal(){var area=FIELD.area,b=document.getElementById('loadBtn');b.t
 
 document.querySelectorAll('.bar button[data-area]').forEach(function(b){b.addEventListener('click',function(){document.querySelectorAll('.bar button[data-area]').forEach(function(x){x.classList.toggle('on',x===b);});loadArea(b.getAttribute('data-area'));});});
 document.querySelectorAll('.find .seg button').forEach(function(b){b.addEventListener('click',function(){activeAB=b.getAttribute('data-ab');document.querySelectorAll('.find .seg button').forEach(function(x){x.classList.toggle('on',x===b);});});});
+document.getElementById('abMoveBtn').addEventListener('click',toggleAbMove);
 document.getElementById('resetBtn').addEventListener('click',function(){resetAB(FIELD.area);placeMarkers();computeRoute();toast('A e B riportati ai punti di esempio');});
 document.getElementById('fitBtn').addEventListener('click',fitAreaToAB);
 document.getElementById('recalcBtn').addEventListener('click',function(){computeRoute();toast('Ricalcolo rotta…');});
@@ -1171,10 +1203,68 @@ function orcEnsure(cb){
 })();
 
 
-resetAB('adriatico');synthField('adriatico');setPill();computeRoute();renderPolarPreview();loadSharedPolar();
+/* ---------- persistenza delle scelte di pagina (chiave di modulo, NON condivisa) ---------- */
+var UIKEY='raffyca-traversata-ui',SAVED_UI=null,_uiReady=false;
+function loadSavedUI(){try{SAVED_UI=JSON.parse(localStorage.getItem(UIKEY)||'null');}catch(e){SAVED_UI=null;}return SAVED_UI;}
+function saveUI(){if(!_uiReady)return;
+  try{
+    function cv(id){var e=document.getElementById(id);return e?!!e.checked:null;}
+    function rv(id){var e=document.getElementById(id);return e?e.value:null;}
+    var u={v:1,
+      A:STATE.A?{lat:STATE.A.lat,lon:STATE.A.lon}:null,
+      B:STATE.B?{lat:STATE.B.lat,lon:STATE.B.lon}:null,
+      dep:STATE.dep,mot:STATE.mot,maxWind:STATE.maxWind,coastBuf:STATE.coastBuf,tackPen:STATE.tackPen,polarEff:STATE.polarEff,
+      motRaw:rv('mot'),windCapRaw:rv('windCap'),coastBufRaw:rv('coastBuf'),
+      motorChk:cv('motorOn'),windCapChk:cv('windCapOn'),coastChk:cv('coastOn'),
+      tSea:cv('tSea'),tCoast:cv('tCoast'),tWind:cv('tWind'),tIso:cv('tIso'),tNames:cv('tNames'),tBathy:cv('tBathy'),navFollow:cv('navFollow')};
+    localStorage.setItem(UIKEY,JSON.stringify(u));
+  }catch(e){}
+}
+/* applica le impostazioni salvate (indipendenti dall'area) — prima di computeRoute */
+function restoreSettings(){var u=SAVED_UI;if(!u)return;
+  if(isFinite(u.dep))STATE.dep=u.dep;
+  if(isFinite(u.mot))STATE.mot=u.mot;
+  if(isFinite(u.maxWind))STATE.maxWind=u.maxWind;
+  if(isFinite(u.coastBuf))STATE.coastBuf=u.coastBuf;
+  if(isFinite(u.tackPen))STATE.tackPen=u.tackPen;
+  if(isFinite(u.polarEff))STATE.polarEff=u.polarEff;
+  STATE.motorOn=!!u.motorChk;
+  function setv(id,val,lbl){var e=document.getElementById(id);if(!e||val==null)return;e.value=val;if(lbl){var l=document.getElementById(lbl);if(l)l.textContent=val;}}
+  var dep=document.getElementById('dep');if(dep&&isFinite(u.dep))dep.value=u.dep;
+  if(u.motorChk!=null){var mo=document.getElementById('motorOn');mo.checked=u.motorChk;var ms=document.getElementById('mot');if(ms)ms.disabled=!u.motorChk;}
+  setv('mot',u.motRaw,'motV');
+  if(u.windCapChk!=null){var wo=document.getElementById('windCapOn');wo.checked=u.windCapChk;var wc=document.getElementById('windCap');if(wc)wc.disabled=!u.windCapChk;}
+  setv('windCap',u.windCapRaw,'windCapV');
+  if(u.coastChk!=null){var co=document.getElementById('coastOn');co.checked=u.coastChk;var cb=document.getElementById('coastBuf');if(cb)cb.disabled=!u.coastChk;}
+  setv('coastBuf',u.coastBufRaw,'coastV');
+  var tp=document.getElementById('tackPen');if(tp&&isFinite(u.tackPen)){tp.value=u.tackPen;var tv=document.getElementById('tackV');if(tv)tv.textContent=u.tackPen;}
+  var pe=document.getElementById('polarEff');if(pe&&isFinite(u.polarEff)){var pv=Math.round(u.polarEff*100);pe.value=pv;var ev=document.getElementById('effV');if(ev)ev.textContent=pv;}
+  ['tSea','tCoast','tWind','tIso','tNames','tBathy','navFollow'].forEach(function(id){var val=u[id];if(val==null)return;var e=document.getElementById(id);if(e)e.checked=val;});
+}
+/* riallinea gli strati della mappa ai toggle salvati (dopo initMap) */
+function applyRestoredToggles(){var u=SAVED_UI;if(!u||!map)return;
+  ['tSea','tNames','tBathy'].forEach(function(id){var e=document.getElementById(id);if(e)e.dispatchEvent(new Event('change'));});
+  redraw();
+}
+/* riporta A/B salvati nell'area attualmente attiva (solo in boot) */
+function applySavedAB(){var u=SAVED_UI;if(!u||!u.A||!u.B)return;
+  var a=clampToArea(FIELD.area,u.A.lat,u.A.lon),b=clampToArea(FIELD.area,u.B.lat,u.B.lon);
+  STATE.A={lat:a.lat,lon:a.lon};STATE.B={lat:b.lat,lon:b.lon};
+  if(markA)markA.setLatLng([a.lat,a.lon]);if(markB)markB.setLatLng([b.lat,b.lon]);
+  computeRoute();}
+
+// ---- boot ----
+loadSavedUI();
+resetAB('adriatico');synthField('adriatico');setPill();
+restoreSettings();
+computeRoute();renderPolarPreview();loadSharedPolar();
 loadCoast();
-if(typeof L!=='undefined'){initMap();}
+if(typeof L!=='undefined'){initMap();applySavedAB();applyRestoredToggles();}
 initWorker();
+_uiReady=true;
+// persisti anche i toggle di sola visualizzazione (non passano da computeRoute)
+document.addEventListener('change',function(e){var id=e.target&&e.target.id;
+  if(id&&/^(tSea|tCoast|tWind|tIso|tNames|tBathy|navFollow)$/.test(id))saveUI();});
 // PWA: registra il service worker (offline). Network-first sulla navigazione evita la trappola della cache vecchia.
 /* picker A/B da lista waypoint (Carta Nautica) */
 (function(){var sel=document.getElementById('wpPick');if(!sel)return;
@@ -1217,8 +1307,4 @@ function refreshIsobate(){
 }
 
 </script>
-<div id="isoLegend" style="display:none;position:absolute;left:8px;bottom:26px;z-index:650;background:rgba(6,14,24,.85);border:1px solid #1a3248;border-radius:8px;padding:6px 9px;font:600 10px ui-monospace,monospace;color:#cfe">
-<div style="opacity:.65;margin-bottom:3px;letter-spacing:.5px">BATIMETRIA (m)</div>
-<span style="color:#8fe3ff">━</span>5 <span style="color:#2BD9C4">━</span>10 <span style="color:#46d68a">━</span>20 <span style="color:#FFC24B">━</span>50 <span style="color:#FF6B6B">━</span>100 <span style="color:#c792ea">━</span>200 <span style="color:#f78fb3">━</span>500 <span style="color:#9aa7ff">━</span>1000
-</div>
 </body></html>
