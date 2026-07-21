@@ -942,13 +942,13 @@ function geocode(){var q=document.getElementById('q').value.trim();if(!q)return;
    Riquadri larghi e SOVRAPPOSTI, costa ritagliata on-device. Alto Adriatico incluso. */
 var ZONE_BOX={
  "Alto Adriatico":{latN:45.85,latS:44.35,lonW:12.15,lonE:15.95},
- "Medio Adriatico":{latN:44.95,latS:42.55,lonW:12.15,lonE:16.70},
+ "Medio Adriatico":{latN:44.95,latS:41.50,lonW:12.15,lonE:16.70},
  "Basso Adriatico":{latN:43.40,latS:40.00,lonW:15.10,lonE:20.30},
  "Mar Ionio":{latN:40.55,latS:36.60,lonW:14.60,lonE:19.60},
- "Basso Tirreno":{latN:41.20,latS:37.70,lonW:11.80,lonE:16.70},
- "Alto Tirreno":{latN:43.20,latS:40.80,lonW:7.50,lonE:11.95},
+ "Basso Tirreno":{latN:41.80,latS:37.70,lonW:11.80,lonE:16.70},
+ "Alto Tirreno":{latN:44.20,latS:40.80,lonW:7.50,lonE:11.95},
  "Mar Ligure":{latN:44.60,latS:43.10,lonW:7.40,lonE:10.20},
- "Sardegna":{latN:41.50,latS:38.70,lonW:7.90,lonE:10.90},
+ "Sardegna":{latN:41.50,latS:38.70,lonW:7.90,lonE:12.00},
  "Sicilia":{latN:38.70,latS:36.30,lonW:11.80,lonE:15.80}};
 function makeZoneArea(box,name){
   if(!COAST)return false;
@@ -961,21 +961,41 @@ function makeZoneArea(box,name){
   AREAS['custom']={name:name||'Zona',latN:b.latN,latS:b.latS,lonW:b.lonW,lonE:b.lonE,A:[As.lat,As.lon],B:[Bs.lat,Bs.lon]};
   return true;
 }
-function initZoneArea(){
-  var z=""; try{var p=JSON.parse(localStorage.getItem("raffyca-profile")||"{}");z=(p.zone||"").trim();}catch(e){}
-  var box=ZONE_BOX[z]; if(!box||!COAST)return;       // zona vuota/ignota: resta l'area di default
-  if(!makeZoneArea(box,z))return;
-  var b=document.getElementById("customAreaBtn"); if(b){b.style.display="";b.textContent="⚓ "+z;}
+var ZONE_SLUG={"Alto Adriatico":"alto-adriatico","Medio Adriatico":"medio-adriatico","Basso Adriatico":"basso-adriatico","Mar Ionio":"mar-ionio","Basso Tirreno":"basso-tirreno","Alto Tirreno":"alto-tirreno","Mar Ligure":"mar-ligure","Sardegna":"sardegna","Sicilia":"sicilia"};
+function activateZoneCustom(name,box){
+  var b=document.getElementById("customAreaBtn"); if(b){b.style.display="";b.textContent="⚓ "+name;}
   document.querySelectorAll(".bar button[data-area]").forEach(function(x){x.classList.toggle("on",x===b);});
   loadArea("custom"); if(map)map.panTo([(box.latN+box.latS)/2,(box.lonW+box.lonE)/2]);
   if(typeof applySavedAB==='function')applySavedAB();
+}
+function loadZoneMaskOSM(name,box,cb){
+  var slug=ZONE_SLUG[name];
+  if(!slug||typeof fetch==='undefined'){cb(false);return;}
+  fetch('./coastmasks/'+slug+'.json').then(function(r){return r.ok?r.json():Promise.reject();}).then(function(m){
+    var raw=atob(m.bits),u=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)u[i]=raw.charCodeAt(i);m._bits=u;
+    MED_MASKS['custom']=m;
+    var clat=(box.latN+box.latS)/2,clon=(box.lonW+box.lonE)/2;
+    var As=findSea(m,clat,clon),Bs=findSea(m,clamp(clat+(box.latN-box.latS)*0.22,box.latS+0.05,box.latN-0.05),clamp(clon+(box.lonE-box.lonW)*0.22,box.lonW+0.05,box.lonE-0.05));
+    AREAS['custom']={name:name,latN:m.latN,latS:m.latS,lonW:m.lonW,lonE:m.lonE,A:[As.lat,As.lon],B:[Bs.lat,Bs.lon]};
+    activateZoneCustom(name,box); if(map&&typeof redraw==='function')redraw(); cb(true);
+  }).catch(function(){cb(false);});
+}
+function initZoneArea(){
+  var z=""; try{var p=JSON.parse(localStorage.getItem("raffyca-profile")||"{}");z=(p.zone||"").trim();}catch(e){}
+  var box=ZONE_BOX[z]; if(!box)return;                // zona vuota/ignota: resta l'area di default
+  loadZoneMaskOSM(z,box,function(ok){
+    if(ok)return;                                     // maschera OSM precotta attivata
+    if(!COAST)return;                                 // offline/costa non pronta: resta default
+    if(!makeZoneArea(box,z))return;                   // fallback: costa grossolana on-device
+    activateZoneCustom(z,box);
+  });
 }
 function loadCoast(){if(COAST)return;
   var ab=document.getElementById('areaBtn');
   if(typeof fetch==='undefined'){if(ab){ab.setAttribute('disabled','');ab.title='Carta costa non disponibile';}return;}
   fetch('./mediterranean_land_10m.geojson').then(function(r){return r.json();}).then(function(j){coastPrep(j);buildCoastSegs();if(map)redraw();
     if(ab)ab.removeAttribute('disabled');try{initZoneArea();}catch(e){}})
-  .catch(function(){if(ab){ab.setAttribute('disabled','');ab.title='Carta costa non disponibile offline';}});}
+  .catch(function(){if(ab){ab.setAttribute('disabled','');ab.title='Carta costa non disponibile offline';}try{initZoneArea();}catch(e){}});}
 function createCustomArea(){var q=document.getElementById('qarea').value.trim();if(!q){toast('Scrivi una zona di mare');return;}
   if(!COAST){toast('Carta costa non ancora caricata');return;}
   var btn=document.getElementById('areaBtn');btn.textContent='…';
